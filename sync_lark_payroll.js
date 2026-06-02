@@ -29,11 +29,16 @@ const SOURCE_DATE_FIELD = process.env.LARK_SOURCE_DATE_FIELD || "";
 const SOURCE_WORK_DAYS_FIELD = process.env.LARK_SOURCE_WORK_DAYS_FIELD || "";
 const SOURCE_LATE_COUNT_FIELD = process.env.LARK_SOURCE_LATE_COUNT_FIELD || "";
 const SOURCE_OT_HOURS_FIELD = process.env.LARK_SOURCE_OT_HOURS_FIELD || "";
+const SOURCE_STANDARD_DAYS_FIELD =
+  process.env.LARK_SOURCE_STANDARD_DAYS_FIELD || "";
 const HR_NAME_FIELD = process.env.LARK_HR_NAME_FIELD || "";
 const DESTINATION_NAME_FIELD = "Tên NV";
 const DESTINATION_WORK_DAYS_FIELD = "Ngày công TT";
 const DESTINATION_LATE_COUNT_FIELD = "Số lần trễ";
-const DESTINATION_OT_HOURS_FIELD = process.env.LARK_DESTINATION_OT_HOURS_FIELD || "Số giờ OT";
+const DESTINATION_OT_HOURS_FIELD =
+  process.env.LARK_DESTINATION_OT_HOURS_FIELD || "Số giờ OT";
+const DESTINATION_STANDARD_DAYS_FIELD =
+  process.env.LARK_DESTINATION_STANDARD_DAYS_FIELD || "Ngày chuẩn";
 
 const SOURCE_DATE_FIELD_CANDIDATES = [
   "Date",
@@ -105,6 +110,7 @@ const SOURCE_WORK_DAYS_FIELD_CANDIDATES = [
   "Số ngày công",
   "Ngày công",
   "Công thực tế",
+  "Workday attendance",
   "Actual Work Days",
   "Work Days",
 ];
@@ -113,6 +119,8 @@ const SOURCE_LATE_COUNT_FIELD_CANDIDATES = [
   "Số lần trễ",
   "Lần trễ",
   "Số lần đi trễ",
+  "Late arrivals",
+  "Very late arrivals",
   "Very late",
   "Late Count",
 ];
@@ -122,16 +130,27 @@ const SOURCE_OT_HOURS_FIELD_CANDIDATES = [
   "Số giờ tăng ca",
   "Giờ OT",
   "Giờ tăng ca",
+  "Total overtime duration(hr)",
   "OT",
   "OT Hours",
   "Overtime",
   "Overtime Hours",
 ];
 
+const SOURCE_STANDARD_DAYS_FIELD_CANDIDATES = [
+  "Ngày chuẩn",
+  "Ngày chuẩn tính lương",
+  "Standard days",
+  "Working days standard",
+  "Days standard",
+  "Expected working days",
+];
+
 const SOURCE_SUMMARY_FIELD_KEYWORDS = {
   workDays: ["ngày làm việc", "ngày công", "công thực tế", "work day"],
   lateCount: ["trễ", "late"],
   otHours: ["ot", "tăng ca", "overtime"],
+  standardDays: ["ngày chuẩn", "standard", "days standard"],
 };
 
 const SAMPLE_SOURCE_URL =
@@ -179,7 +198,7 @@ function runParseTest() {
   }
 
   console.log(
-    `[OK] Parse test: app_token=${parsed.appToken}, table_id=${parsed.tableId}`
+    `[OK] Parse test: app_token=${parsed.appToken}, table_id=${parsed.tableId}`,
   );
 }
 
@@ -212,18 +231,18 @@ async function apiRequest(method, path, { token, params, body } = {}) {
     data = responseText ? JSON.parse(responseText) : {};
   } catch (error) {
     throw new LarkApiError(
-      `Invalid JSON response for ${method} ${path}: ${responseText}`
+      `Invalid JSON response for ${method} ${path}: ${responseText}`,
     );
   }
 
   if (!response.ok) {
     throw new LarkApiError(
-      `HTTP ${response.status} for ${method} ${path}: ${responseText}`
+      `HTTP ${response.status} for ${method} ${path}: ${responseText}`,
     );
   }
   if (data.code !== 0) {
     throw new LarkApiError(
-      `Lark API error for ${method} ${path}: ${JSON.stringify(data)}`
+      `Lark API error for ${method} ${path}: ${JSON.stringify(data)}`,
     );
   }
 
@@ -243,7 +262,7 @@ async function getTenantAccessToken() {
         app_id: APP_ID,
         app_secret: APP_SECRET,
       },
-    }
+    },
   );
 
   if (!data.tenant_access_token) {
@@ -271,12 +290,12 @@ async function listRecords(appToken, tableId, token, fieldNames) {
     const data = await apiRequest(
       "GET",
       `/open-apis/bitable/v1/apps/${encodeURIComponent(appToken)}/tables/${encodeURIComponent(
-        tableId
+        tableId,
       )}/records`,
       {
         token,
         params,
-      }
+      },
     );
 
     const pageData = data.data || {};
@@ -288,7 +307,9 @@ async function listRecords(appToken, tableId, token, fieldNames) {
 
     pageToken = pageData.page_token || "";
     if (!pageToken) {
-      throw new LarkApiError("Lark response has_more=true but page_token is empty");
+      throw new LarkApiError(
+        "Lark response has_more=true but page_token is empty",
+      );
     }
   }
 }
@@ -308,12 +329,12 @@ async function listFields(appToken, tableId, token) {
     const data = await apiRequest(
       "GET",
       `/open-apis/bitable/v1/apps/${encodeURIComponent(appToken)}/tables/${encodeURIComponent(
-        tableId
+        tableId,
       )}/fields`,
       {
         token,
         params,
-      }
+      },
     );
 
     const pageData = data.data || {};
@@ -325,7 +346,9 @@ async function listFields(appToken, tableId, token) {
 
     pageToken = pageData.page_token || "";
     if (!pageToken) {
-      throw new LarkApiError("Lark fields response has_more=true but page_token is empty");
+      throw new LarkApiError(
+        "Lark fields response has_more=true but page_token is empty",
+      );
     }
   }
 }
@@ -336,14 +359,14 @@ async function batchUpdateRecords(appToken, tableId, token, updates) {
     await apiRequest(
       "POST",
       `/open-apis/bitable/v1/apps/${encodeURIComponent(appToken)}/tables/${encodeURIComponent(
-        tableId
+        tableId,
       )}/records/batch_update`,
       {
         token,
         body: {
           records: chunk,
         },
-      }
+      },
     );
   }
 }
@@ -354,14 +377,14 @@ async function batchCreateRecords(appToken, tableId, token, records) {
     await apiRequest(
       "POST",
       `/open-apis/bitable/v1/apps/${encodeURIComponent(appToken)}/tables/${encodeURIComponent(
-        tableId
+        tableId,
       )}/records/batch_create`,
       {
         token,
         body: {
           records: chunk,
         },
-      }
+      },
     );
   }
 }
@@ -401,7 +424,9 @@ function formatDateKey(date) {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
   return `${values.year}-${values.month}-${values.day}`;
 }
 
@@ -463,12 +488,17 @@ function findFieldValue(fields, fieldName) {
 
   const normalized = fieldName.toLocaleLowerCase("vi-VN");
   const matchedKey = Object.keys(fields).find(
-    (key) => key.toLocaleLowerCase("vi-VN") === normalized
+    (key) => key.toLocaleLowerCase("vi-VN") === normalized,
   );
   return matchedKey ? fields[matchedKey] : undefined;
 }
 
-function findCandidateField(fields, configuredField, candidates, keywords = []) {
+function findCandidateField(
+  fields,
+  configuredField,
+  candidates,
+  keywords = [],
+) {
   if (configuredField) {
     const configuredValue = findFieldValue(fields, configuredField);
     if (configuredValue !== undefined) {
@@ -488,16 +518,18 @@ function findCandidateField(fields, configuredField, candidates, keywords = []) 
     return keywords.some((keyword) => normalized.includes(keyword));
   });
 
-  return matchedKey ? { fieldName: matchedKey, value: fields[matchedKey] } : null;
+  return matchedKey
+    ? { fieldName: matchedKey, value: fields[matchedKey] }
+    : null;
 }
 
 function findSourceName(fields) {
-  const candidate = findCandidateField(fields, "", SOURCE_NAME_FIELD_CANDIDATES, [
-    "tên",
-    "nhân viên",
-    "name",
-    "employee",
-  ]);
+  const candidate = findCandidateField(
+    fields,
+    "",
+    SOURCE_NAME_FIELD_CANDIDATES,
+    ["tên", "nhân viên", "name", "employee"],
+  );
   return candidate ? cellToText(candidate.value) : "";
 }
 
@@ -553,8 +585,18 @@ function parseNumberValue(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function findNumericSummaryValue(fields, configuredField, candidates, keywords) {
-  const candidate = findCandidateField(fields, configuredField, candidates, keywords);
+function findNumericSummaryValue(
+  fields,
+  configuredField,
+  candidates,
+  keywords,
+) {
+  const candidate = findCandidateField(
+    fields,
+    configuredField,
+    candidates,
+    keywords,
+  );
   if (!candidate) {
     return { found: false, value: 0, fieldName: "" };
   }
@@ -573,19 +615,25 @@ function findSourceSummaryValues(fields) {
       fields,
       SOURCE_WORK_DAYS_FIELD,
       SOURCE_WORK_DAYS_FIELD_CANDIDATES,
-      SOURCE_SUMMARY_FIELD_KEYWORDS.workDays
+      SOURCE_SUMMARY_FIELD_KEYWORDS.workDays,
     ),
     lateCount: findNumericSummaryValue(
       fields,
       SOURCE_LATE_COUNT_FIELD,
       SOURCE_LATE_COUNT_FIELD_CANDIDATES,
-      SOURCE_SUMMARY_FIELD_KEYWORDS.lateCount
+      SOURCE_SUMMARY_FIELD_KEYWORDS.lateCount,
     ),
     otHours: findNumericSummaryValue(
       fields,
       SOURCE_OT_HOURS_FIELD,
       SOURCE_OT_HOURS_FIELD_CANDIDATES,
-      SOURCE_SUMMARY_FIELD_KEYWORDS.otHours
+      SOURCE_SUMMARY_FIELD_KEYWORDS.otHours,
+    ),
+    standardDays: findNumericSummaryValue(
+      fields,
+      SOURCE_STANDARD_DAYS_FIELD,
+      SOURCE_STANDARD_DAYS_FIELD_CANDIDATES,
+      SOURCE_SUMMARY_FIELD_KEYWORDS.standardDays,
     ),
   };
 }
@@ -619,7 +667,10 @@ function collectFieldNames(records, fields = []) {
 function resolveEmployeeNameField(records, fields = [], preferredField = "") {
   const fieldNames = collectFieldNames(records, fields);
   const lowerNameMap = new Map(
-    fieldNames.map((fieldName) => [fieldName.toLocaleLowerCase("vi-VN"), fieldName])
+    fieldNames.map((fieldName) => [
+      fieldName.toLocaleLowerCase("vi-VN"),
+      fieldName,
+    ]),
   );
 
   if (preferredField) {
@@ -639,7 +690,9 @@ function resolveEmployeeNameField(records, fields = [], preferredField = "") {
 
   const fuzzy = fieldNames.find((fieldName) => {
     const normalized = fieldName.toLocaleLowerCase("vi-VN");
-    return EMPLOYEE_NAME_FIELD_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    return EMPLOYEE_NAME_FIELD_KEYWORDS.some((keyword) =>
+      normalized.includes(keyword),
+    );
   });
 
   if (fuzzy) {
@@ -647,13 +700,15 @@ function resolveEmployeeNameField(records, fields = [], preferredField = "") {
   }
 
   throw new Error(
-    "Cannot detect employee name field in HR table. Set LARK_HR_NAME_FIELD to the exact field name."
+    "Cannot detect employee name field in HR table. Set LARK_HR_NAME_FIELD to the exact field name.",
   );
 }
 
 function findAttendanceDayKey(fields) {
   if (SOURCE_DATE_FIELD) {
-    const configuredKey = parseDateKey(findFieldValue(fields, SOURCE_DATE_FIELD));
+    const configuredKey = parseDateKey(
+      findFieldValue(fields, SOURCE_DATE_FIELD),
+    );
     if (configuredKey) {
       return configuredKey;
     }
@@ -668,7 +723,9 @@ function findAttendanceDayKey(fields) {
 
   const fuzzyEntries = Object.entries(fields).filter(([fieldName]) => {
     const normalized = fieldName.toLocaleLowerCase("vi-VN");
-    return SOURCE_DATE_FIELD_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    return SOURCE_DATE_FIELD_KEYWORDS.some((keyword) =>
+      normalized.includes(keyword),
+    );
   });
 
   for (const [, value] of fuzzyEntries) {
@@ -714,6 +771,7 @@ function aggregateAttendance(records) {
         workDays: 0,
         lateCount: 0,
         otHours: 0,
+        standardDays: 0,
         workDayKeys: new Set(),
       });
     }
@@ -729,11 +787,15 @@ function aggregateAttendance(records) {
       if (summaryValues.otHours.found) {
         summary.otHours += summaryValues.otHours.value;
       }
+      if (summaryValues.standardDays.found) {
+        summary.standardDays = summaryValues.standardDays.value;
+      }
       continue;
     }
 
     const dayKey = findAttendanceDayKey(fields);
-    const workDayKey = dayKey || `record:${record.record_id || summary.workDayKeys.size}`;
+    const workDayKey =
+      dayKey || `record:${record.record_id || summary.workDayKeys.size}`;
     if (!summary.workDayKeys.has(workDayKey)) {
       summary.workDayKeys.add(workDayKey);
       summary.workDays += 1;
@@ -751,6 +813,7 @@ function aggregateAttendance(records) {
     workDays: summary.workDays,
     lateCount: summary.lateCount,
     otHours: summary.otHours,
+    standardDays: summary.standardDays,
   }));
 }
 
@@ -784,7 +847,7 @@ function buildNameIndex(records, nameField, { duplicateLabel } = {}) {
   if (duplicates.size > 0) {
     throw new Error(
       `${duplicateLabel || `Table has duplicated names in field ${nameField}`}: ` +
-        Array.from(duplicates).sort().join(", ")
+        Array.from(duplicates).sort().join(", "),
     );
   }
 
@@ -797,7 +860,9 @@ function buildUpdates(summaries, destinationIndex) {
 
   const sortedSummaries = summaries
     .slice()
-    .sort((a, b) => normalizeName(a.name).localeCompare(normalizeName(b.name), "vi-VN"));
+    .sort((a, b) =>
+      normalizeName(a.name).localeCompare(normalizeName(b.name), "vi-VN"),
+    );
 
   for (const summary of sortedSummaries) {
     const recordId = destinationIndex.get(normalizeName(summary.name));
@@ -812,6 +877,7 @@ function buildUpdates(summaries, destinationIndex) {
         [DESTINATION_WORK_DAYS_FIELD]: summary.workDays,
         [DESTINATION_LATE_COUNT_FIELD]: summary.lateCount,
         [DESTINATION_OT_HOURS_FIELD]: summary.otHours || 0,
+        [DESTINATION_STANDARD_DAYS_FIELD]: summary.standardDays || 0,
       },
     });
   }
@@ -834,7 +900,9 @@ async function analyzeEmployeeRegistry(token, summaries) {
   const table = getHrTable();
   const fields = await listFields(table.appToken, table.tableId, token);
   const nameField = resolveEmployeeNameField([], fields, HR_NAME_FIELD);
-  const records = await listRecords(table.appToken, table.tableId, token, [nameField]);
+  const records = await listRecords(table.appToken, table.tableId, token, [
+    nameField,
+  ]);
   const index = buildNameIndex(records, nameField, {
     duplicateLabel: `HR table has duplicated employee names in field ${nameField}`,
   });
@@ -862,7 +930,7 @@ async function addMissingHrEmployees(sourceUrl) {
       analysis.hr.table.appToken,
       analysis.hr.table.tableId,
       analysis.token,
-      records
+      records,
     );
   }
 
@@ -882,7 +950,11 @@ async function analyzePayroll(sourceUrl) {
   const source = parseSourceUrl(sourceUrl);
   const token = await getTenantAccessToken();
 
-  const sourceRecords = await listRecords(source.appToken, source.tableId, token);
+  const sourceRecords = await listRecords(
+    source.appToken,
+    source.tableId,
+    token,
+  );
   const summaries = aggregateAttendance(sourceRecords);
   const destinationRecords = await listRecords(
     DESTINATION_APP_TOKEN,
@@ -893,7 +965,8 @@ async function analyzePayroll(sourceUrl) {
       DESTINATION_WORK_DAYS_FIELD,
       DESTINATION_LATE_COUNT_FIELD,
       DESTINATION_OT_HOURS_FIELD,
-    ]
+      DESTINATION_STANDARD_DAYS_FIELD,
+    ],
   );
 
   const destinationIndex = buildDestinationIndex(destinationRecords);
@@ -901,7 +974,9 @@ async function analyzePayroll(sourceUrl) {
   const hr = await analyzeEmployeeRegistry(token, summaries);
   const previewRows = summaries
     .slice()
-    .sort((a, b) => normalizeName(a.name).localeCompare(normalizeName(b.name), "vi-VN"))
+    .sort((a, b) =>
+      normalizeName(a.name).localeCompare(normalizeName(b.name), "vi-VN"),
+    )
     .map((summary) => ({
       name: summary.name,
       workDays: summary.workDays,
@@ -909,7 +984,8 @@ async function analyzePayroll(sourceUrl) {
       otHours: summary.otHours || 0,
       matched: destinationIndex.has(normalizeName(summary.name)),
       hrMatched: !hr.missingNames.some(
-        (missingName) => normalizeName(missingName) === normalizeName(summary.name)
+        (missingName) =>
+          normalizeName(missingName) === normalizeName(summary.name),
       ),
     }));
 
@@ -930,25 +1006,27 @@ async function analyzePayroll(sourceUrl) {
 
 async function syncPayroll(sourceUrl, { dryRun = false } = {}) {
   const source = parseSourceUrl(sourceUrl);
-  console.log(`Source app_token=${source.appToken}, table_id=${source.tableId}`);
+  console.log(
+    `Source app_token=${source.appToken}, table_id=${source.tableId}`,
+  );
   console.log("Fetching tenant_access_token and reading tables...");
 
   const analysis = await analyzePayroll(sourceUrl);
 
   console.log(
-    `Read ${analysis.sourceRecordCount} source records, summarized ${analysis.employeeCount} employees.`
+    `Read ${analysis.sourceRecordCount} source records, summarized ${analysis.employeeCount} employees.`,
   );
   console.log(`Prepared ${analysis.updateCount} destination updates.`);
   if (analysis.missingNames.length > 0) {
     console.log(
       "[WARN] These names were not found in the payroll table:",
-      analysis.missingNames.join(", ")
+      analysis.missingNames.join(", "),
     );
   }
   if (analysis.hr.missingNames.length > 0) {
     console.log(
       "[WARN] These names were not found in the HR table:",
-      analysis.hr.missingNames.join(", ")
+      analysis.hr.missingNames.join(", "),
     );
   }
 
@@ -967,7 +1045,7 @@ async function syncPayroll(sourceUrl, { dryRun = false } = {}) {
     DESTINATION_APP_TOKEN,
     DESTINATION_TABLE_ID,
     analysis.token,
-    analysis.updates
+    analysis.updates,
   );
   console.log(`Updated ${analysis.updates.length} payroll records.`);
   return analysis;
@@ -1004,7 +1082,9 @@ async function main() {
   }
 
   if (!args.sourceUrl) {
-    console.error("Missing SOURCE_URL. Pass it as an argument or set SOURCE_URL env var.");
+    console.error(
+      "Missing SOURCE_URL. Pass it as an argument or set SOURCE_URL env var.",
+    );
     process.exitCode = 2;
     return;
   }
