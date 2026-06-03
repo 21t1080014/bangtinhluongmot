@@ -31,6 +31,9 @@ const SOURCE_LATE_COUNT_FIELD = process.env.LARK_SOURCE_LATE_COUNT_FIELD || "";
 const SOURCE_OT_HOURS_FIELD = process.env.LARK_SOURCE_OT_HOURS_FIELD || "";
 const SOURCE_STANDARD_DAYS_FIELD =
   process.env.LARK_SOURCE_STANDARD_DAYS_FIELD || "";
+const SOURCE_OT_WORKDAY_FIELD = process.env.LARK_SOURCE_OT_WORKDAY_FIELD || "";
+const SOURCE_OT_WEEKEND_FIELD = process.env.LARK_SOURCE_OT_WEEKEND_FIELD || "";
+const SOURCE_OT_HOLIDAY_FIELD = process.env.LARK_SOURCE_OT_HOLIDAY_FIELD || "";
 const HR_NAME_FIELD = process.env.LARK_HR_NAME_FIELD || "";
 const DESTINATION_NAME_FIELD = "Tên NV";
 const DESTINATION_WORK_DAYS_FIELD = "Ngày công TT";
@@ -39,6 +42,12 @@ const DESTINATION_OT_HOURS_FIELD =
   process.env.LARK_DESTINATION_OT_HOURS_FIELD || "Số giờ OT";
 const DESTINATION_STANDARD_DAYS_FIELD =
   process.env.LARK_DESTINATION_STANDARD_DAYS_FIELD || "Ngày chuẩn";
+const DESTINATION_OT_WORKDAY_FIELD =
+  process.env.LARK_DESTINATION_OT_WORKDAY_FIELD || "Tăng ca ngày thường";
+const DESTINATION_OT_WEEKEND_FIELD =
+  process.env.LARK_DESTINATION_OT_WEEKEND_FIELD || "Tăng ca ngày nghỉ tuần";
+const DESTINATION_OT_HOLIDAY_FIELD =
+  process.env.LARK_DESTINATION_OT_HOLIDAY_FIELD || "Tăng ca ngày lễ";
 
 const SOURCE_DATE_FIELD_CANDIDATES = [
   "Date",
@@ -146,11 +155,35 @@ const SOURCE_STANDARD_DAYS_FIELD_CANDIDATES = [
   "Expected working days",
 ];
 
+const SOURCE_OT_WORKDAY_FIELD_CANDIDATES = [
+  "Overtime on working days(hr)",
+  "Overtime on working days - Overtime pay(hr)",
+  "Tăng ca ngày thường",
+  "OT ngày thường",
+];
+
+const SOURCE_OT_WEEKEND_FIELD_CANDIDATES = [
+  "Overtime on non-working days(hr)",
+  "Overtime on non-working days - Overtime pay(hr)",
+  "Tăng ca ngày nghỉ tuần",
+  "OT ngày nghỉ",
+];
+
+const SOURCE_OT_HOLIDAY_FIELD_CANDIDATES = [
+  "Overtime on holidays(hr)",
+  "Overtime on holidays - Overtime pay(hr)",
+  "Tăng ca ngày lễ",
+  "OT ngày lễ",
+];
+
 const SOURCE_SUMMARY_FIELD_KEYWORDS = {
   workDays: ["ngày làm việc", "ngày công", "công thực tế", "work day"],
   lateCount: ["trễ", "late"],
   otHours: ["ot", "tăng ca", "overtime"],
   standardDays: ["ngày chuẩn", "standard", "days standard"],
+  otWorkday: ["overtime on working", "tăng ca ngày thường"],
+  otWeekend: ["overtime on non-working", "tăng ca ngày nghỉ"],
+  otHoliday: ["overtime on holidays", "tăng ca ngày lễ"],
 };
 
 const SAMPLE_SOURCE_URL =
@@ -635,6 +668,24 @@ function findSourceSummaryValues(fields) {
       SOURCE_STANDARD_DAYS_FIELD_CANDIDATES,
       SOURCE_SUMMARY_FIELD_KEYWORDS.standardDays,
     ),
+    otWorkday: findNumericSummaryValue(
+      fields,
+      SOURCE_OT_WORKDAY_FIELD,
+      SOURCE_OT_WORKDAY_FIELD_CANDIDATES,
+      ["overtime on working", "tăng ca ngày thường"],
+    ),
+    otWeekend: findNumericSummaryValue(
+      fields,
+      SOURCE_OT_WEEKEND_FIELD,
+      SOURCE_OT_WEEKEND_FIELD_CANDIDATES,
+      ["overtime on non-working", "tăng ca ngày nghỉ"],
+    ),
+    otHoliday: findNumericSummaryValue(
+      fields,
+      SOURCE_OT_HOLIDAY_FIELD,
+      SOURCE_OT_HOLIDAY_FIELD_CANDIDATES,
+      ["overtime on holidays", "tăng ca ngày lễ"],
+    ),
   };
 }
 
@@ -752,7 +803,13 @@ function aggregateAttendance(records) {
     const result = cellToText(findFieldValue(fields, SOURCE_RESULT_FIELD));
     const summaryValues = findSourceSummaryValues(fields);
     const hasDirectSummaryCounts =
-      summaryValues.workDays.found || summaryValues.lateCount.found;
+      summaryValues.workDays.found ||
+      summaryValues.lateCount.found ||
+      summaryValues.standardDays.found ||
+      summaryValues.otHours.found ||
+      summaryValues.otWorkday.found ||
+      summaryValues.otWeekend.found ||
+      summaryValues.otHoliday.found;
 
     if (!name) {
       continue;
@@ -772,6 +829,9 @@ function aggregateAttendance(records) {
         lateCount: 0,
         otHours: 0,
         standardDays: 0,
+        otWorkday: 0,
+        otWeekend: 0,
+        otHoliday: 0,
         workDayKeys: new Set(),
       });
     }
@@ -790,6 +850,13 @@ function aggregateAttendance(records) {
       if (summaryValues.standardDays.found) {
         summary.standardDays = summaryValues.standardDays.value;
       }
+      if (summaryValues.otWorkday.found)
+        summary.otWorkday += summaryValues.otWorkday.value;
+      if (summaryValues.otWeekend.found)
+        summary.otWeekend += summaryValues.otWeekend.value;
+      if (summaryValues.otHoliday.found)
+        summary.otHoliday += summaryValues.otHoliday.value;
+
       continue;
     }
 
@@ -814,6 +881,9 @@ function aggregateAttendance(records) {
     lateCount: summary.lateCount,
     otHours: summary.otHours,
     standardDays: summary.standardDays,
+    otWorkday: summary.otWorkday,
+    otWeekend: summary.otWeekend,
+    otHoliday: summary.otHoliday,
   }));
 }
 
@@ -878,6 +948,9 @@ function buildUpdates(summaries, destinationIndex) {
         [DESTINATION_LATE_COUNT_FIELD]: summary.lateCount,
         [DESTINATION_OT_HOURS_FIELD]: summary.otHours || 0,
         [DESTINATION_STANDARD_DAYS_FIELD]: summary.standardDays || 0,
+        [DESTINATION_OT_WORKDAY_FIELD]: summary.otWorkday || 0,
+        [DESTINATION_OT_WEEKEND_FIELD]: summary.otWeekend || 0,
+        [DESTINATION_OT_HOLIDAY_FIELD]: summary.otHoliday || 0,
       },
     });
   }
@@ -966,6 +1039,9 @@ async function analyzePayroll(sourceUrl) {
       DESTINATION_LATE_COUNT_FIELD,
       DESTINATION_OT_HOURS_FIELD,
       DESTINATION_STANDARD_DAYS_FIELD,
+      DESTINATION_OT_WORKDAY_FIELD,
+      DESTINATION_OT_WEEKEND_FIELD,
+      DESTINATION_OT_HOLIDAY_FIELD,
     ],
   );
 
@@ -1115,6 +1191,9 @@ module.exports = {
   DESTINATION_NAME_FIELD,
   DESTINATION_OT_HOURS_FIELD,
   DESTINATION_WORK_DAYS_FIELD,
+  DESTINATION_OT_WORKDAY_FIELD,
+  DESTINATION_OT_WEEKEND_FIELD,
+  DESTINATION_OT_HOLIDAY_FIELD,
   findAttendanceDayKey,
   findSourceSummaryValues,
   getHrTable,
